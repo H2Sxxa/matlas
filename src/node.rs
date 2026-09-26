@@ -2,6 +2,7 @@
 use std::ops::Add;
 
 use crate::{context::NodeContext, item::Item};
+use arrayvec::ArrayVec;
 use serde::{Deserialize, Serialize};
 pub mod belt;
 pub mod distributor;
@@ -10,6 +11,8 @@ pub mod inbound;
 pub mod mixturer;
 pub mod outbound;
 pub mod overflow;
+
+pub const MAX_OUTPUT_DIRECTIONS: usize = 3;
 
 pub trait NodeBehavior {
     const NAME: &'static str;
@@ -26,8 +29,13 @@ pub trait NodeBehavior {
     fn input_capacity(&self) -> usize {
         0
     }
-    fn output_directions(&self, direction: Direction) -> Vec<Direction> {
-        vec![direction]
+    fn output_directions(
+        &self,
+        direction: Direction,
+    ) -> ArrayVec<Direction, MAX_OUTPUT_DIRECTIONS> {
+        let mut output = ArrayVec::new();
+        output.push(direction);
+        output
     }
     fn confirm_output(&mut self, _output_direction: Direction, _facing: Direction) {}
 }
@@ -119,7 +127,7 @@ impl Node {
         matches!(self.object, NodeObject::Transport(_))
     }
 
-    pub fn output_directions(&self) -> Vec<Direction> {
+    pub fn output_directions(&self) -> ArrayVec<Direction, MAX_OUTPUT_DIRECTIONS> {
         match &self.object {
             NodeObject::Generator(node) => node.output_directions(self.direction),
             NodeObject::Inbound(node) => node.output_directions(self.direction),

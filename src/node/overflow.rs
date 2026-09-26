@@ -1,8 +1,9 @@
+use arrayvec::ArrayVec;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     item::Item,
-    node::{Direction, NodeBehavior},
+    node::{Direction, MAX_OUTPUT_DIRECTIONS, NodeBehavior},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,13 +56,20 @@ impl NodeBehavior for OverflowNode {
         usize::from(self.out.is_none())
     }
 
-    fn output_directions(&self, direction: Direction) -> Vec<Direction> {
+    fn output_directions(
+        &self,
+        direction: Direction,
+    ) -> ArrayVec<Direction, MAX_OUTPUT_DIRECTIONS> {
         let sides = if self.next_overflow {
             [direction.right(), direction.left()]
         } else {
             [direction.left(), direction.right()]
         };
-        vec![direction, sides[0], sides[1]]
+        let mut result = ArrayVec::new();
+        result.push(direction);
+        result.push(sides[0]);
+        result.push(sides[1]);
+        result
     }
 
     fn confirm_output(&mut self, output_direction: Direction, facing: Direction) {
@@ -74,13 +82,13 @@ impl NodeBehavior for OverflowNode {
 
 #[cfg(test)]
 mod tests {
+    use super::OverflowNode;
     use crate::{
         node::{Direction, NodeBehavior},
         test_support::{
             block_forward, context, free_forward, overflow, routed_outputs, router_graph,
         },
     };
-    use super::OverflowNode;
 
     // facing right -> (right, up, down); after up was used -> (right, down, up)
     // Legend: forward stays first, and only a side delivery flips the side order.
@@ -89,26 +97,26 @@ mod tests {
         let mut node = OverflowNode::new();
 
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Up, Direction::Down]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Up, Direction::Down]
         );
 
         node.confirm_output(Direction::Right, Direction::Right);
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Up, Direction::Down]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Up, Direction::Down]
         );
 
         node.confirm_output(Direction::Up, Direction::Right);
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Down, Direction::Up]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Down, Direction::Up]
         );
 
         node.confirm_output(Direction::Down, Direction::Right);
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Up, Direction::Down]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Up, Direction::Down]
         );
     }
 

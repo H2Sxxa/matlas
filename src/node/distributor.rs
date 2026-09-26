@@ -1,8 +1,9 @@
+use arrayvec::ArrayVec;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     item::Item,
-    node::{Direction, NodeBehavior},
+    node::{Direction, MAX_OUTPUT_DIRECTIONS, NodeBehavior},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,11 +56,16 @@ impl NodeBehavior for DistributorNode {
         usize::from(self.out.is_none())
     }
 
-    fn output_directions(&self, direction: Direction) -> Vec<Direction> {
+    fn output_directions(
+        &self,
+        direction: Direction,
+    ) -> ArrayVec<Direction, MAX_OUTPUT_DIRECTIONS> {
         let outputs = [direction, direction.left(), direction.right()];
-        (0..outputs.len())
-            .map(|offset| outputs[(usize::from(self.next_output) + offset) % outputs.len()])
-            .collect()
+        let mut result = ArrayVec::new();
+        for offset in 0..outputs.len() {
+            result.push(outputs[(usize::from(self.next_output) + offset) % outputs.len()]);
+        }
+        result
     }
 
     fn confirm_output(&mut self, output_direction: Direction, facing: Direction) {
@@ -75,11 +81,11 @@ impl NodeBehavior for DistributorNode {
 
 #[cfg(test)]
 mod tests {
+    use super::DistributorNode;
     use crate::{
         node::{Direction, NodeBehavior},
         test_support::{block_forward, context, distributor, routed_outputs, router_graph},
     };
-    use super::DistributorNode;
 
     // facing right -> (right, up, down); after up was used -> (down, right, up)
     // Legend: outputs are listed first to last and the router tries them in order.
@@ -88,20 +94,20 @@ mod tests {
         let mut node = DistributorNode::new();
 
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Up, Direction::Down]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Up, Direction::Down]
         );
 
         node.confirm_output(Direction::Up, Direction::Right);
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Down, Direction::Right, Direction::Up]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Down, Direction::Right, Direction::Up]
         );
 
         node.confirm_output(Direction::Down, Direction::Right);
         assert_eq!(
-            node.output_directions(Direction::Right),
-            vec![Direction::Right, Direction::Up, Direction::Down]
+            node.output_directions(Direction::Right).as_slice(),
+            &[Direction::Right, Direction::Up, Direction::Down]
         );
     }
 

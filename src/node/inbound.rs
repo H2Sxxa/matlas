@@ -39,12 +39,12 @@ impl NodeBehavior for InBoundNode {
 
 #[cfg(test)]
 mod tests {
+    use super::InBoundNode;
     use crate::{
         item::Item,
         node::{Direction, NodeBehavior, Pos},
         test_support::{context, generator, graph, inbound, place, ticks},
     };
-    use super::InBoundNode;
 
     // [queued: .] --accept(A), accept(B)--> [queued: A, B] --eval--> repository
     // Legend: A first item | B second item; an inbound accepts any number of items.

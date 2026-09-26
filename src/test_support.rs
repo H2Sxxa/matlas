@@ -65,7 +65,9 @@ pub fn overflow(direction: Direction) -> Node {
 }
 
 pub fn tick(graph: &mut Graph, context: &mut NodeContext) {
-    graph.tick(context).expect("test graphs stay inside their bounds");
+    graph
+        .tick(context)
+        .expect("test graphs stay inside their bounds");
 }
 
 pub fn ticks(graph: &mut Graph, context: &mut NodeContext, count: usize) {

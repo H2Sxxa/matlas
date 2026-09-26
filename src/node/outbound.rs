@@ -47,12 +47,12 @@ impl NodeBehavior for OutBoundNode {
 
 #[cfg(test)]
 mod tests {
+    use super::OutBoundNode;
     use crate::{
         item::Item,
         node::{Direction, NodeBehavior, Pos},
         test_support::{context, graph, outbound, peek_output, place, ticks},
     };
-    use super::OutBoundNode;
 
     // repository[7] = 2, repository[8] = 1
     // [out: .] --eval--> [out: 7] --take--> [out: .] --eval--> [out: 7]
@@ -85,7 +85,11 @@ mod tests {
     #[test]
     fn holds_its_withdrawal_until_the_output_can_move() {
         let mut graph = graph((2, 1));
-        place(&mut graph, Pos { x: 0, y: 0 }, outbound(7, Direction::Right));
+        place(
+            &mut graph,
+            Pos { x: 0, y: 0 },
+            outbound(7, Direction::Right),
+        );
         let mut context = context();
         context.repo.inbound(7);
         context.repo.inbound(7);

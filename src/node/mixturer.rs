@@ -70,12 +70,12 @@ impl NodeBehavior for MixturerNode {
 
 #[cfg(test)]
 mod tests {
+    use super::MixturerNode;
     use crate::{
         item::Item,
         node::{Direction, NodeBehavior, Pos},
         test_support::{belt, context, generator, graph, inbound, mixer, outbound, place, ticks},
     };
-    use super::MixturerNode;
 
     // in0: 0 | in1: 0 | out: .   --eval-->   in0: . | in1: . | out: 0+0
     // Legend: in0/in1 input slots | out output buffer. One craft consumes one item
@@ -150,7 +150,11 @@ mod tests {
     #[test]
     fn crafts_with_inputs_that_arrive_on_different_ticks() {
         let mut graph = graph((3, 3));
-        place(&mut graph, Pos { x: 0, y: 0 }, outbound(0, Direction::Right));
+        place(
+            &mut graph,
+            Pos { x: 0, y: 0 },
+            outbound(0, Direction::Right),
+        );
         place(&mut graph, Pos { x: 1, y: 0 }, mixer(Direction::Right));
         place(&mut graph, Pos { x: 2, y: 0 }, inbound(Direction::Right));
         place(&mut graph, Pos { x: 1, y: 1 }, belt(Direction::Up));

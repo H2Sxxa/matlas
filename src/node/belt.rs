@@ -53,12 +53,12 @@ impl NodeBehavior for BeltNode {
 
 #[cfg(test)]
 mod tests {
+    use super::BeltNode;
     use crate::{
         item::Item,
         node::{Direction, NodeBehavior, Pos},
         test_support::{belt, context, graph, inbound, outbound, peek_output, place, ticks},
     };
-    use super::BeltNode;
 
     // repository[7] = 1   (0,0) O>  (1,0) B>  (2,0) I
     // Legend: O outbound (item 7) | B belt | I inbound | > facing right.
@@ -69,7 +69,11 @@ mod tests {
     fn moves_its_item_on_the_next_tick() {
         let mut graph = graph((3, 1));
         let belt_pos = Pos { x: 1, y: 0 };
-        place(&mut graph, Pos { x: 0, y: 0 }, outbound(7, Direction::Right));
+        place(
+            &mut graph,
+            Pos { x: 0, y: 0 },
+            outbound(7, Direction::Right),
+        );
         place(&mut graph, belt_pos, belt(Direction::Right));
         place(&mut graph, Pos { x: 2, y: 0 }, inbound(Direction::Right));
         let mut context = context();

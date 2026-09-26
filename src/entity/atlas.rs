@@ -1,7 +1,7 @@
+use std::collections::HashMap;
+
 use rand::{Rng, RngExt};
-use scc::HashMap;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicUsize;
 
 use crate::item::{CapitalizedItem, Item, ItemId};
 
@@ -11,7 +11,7 @@ pub struct Atlas {
     levels: HashMap<ItemId, usize>,
     values: HashMap<ItemId, usize>,
     receipes: HashMap<(Item, Item), Item>,
-    increment: AtomicUsize,
+    increment: ItemId,
 }
 
 impl Atlas {
@@ -21,46 +21,42 @@ impl Atlas {
             levels: HashMap::new(),
             values: HashMap::new(),
             receipes: HashMap::new(),
-            increment: AtomicUsize::new(1),
+            increment: 1,
         }
     }
 
-    pub fn init(&self, rng: &mut impl Rng) -> Item {
+    pub fn init(&mut self, rng: &mut impl Rng) -> Item {
         let name = generate_name(rng);
         let value = 1;
         let level = 1;
-        self.names.upsert_sync(0, name);
-        self.values.upsert_sync(0, value);
-        self.levels.upsert_sync(0, level);
+        self.names.insert(0, name);
+        self.values.insert(0, value);
+        self.levels.insert(0, level);
 
         Item { id: 0 }
     }
 
-    pub fn base(&self, rng: &mut impl Rng) -> Item {
-        if self.names.get_sync(&0).is_some() {
+    pub fn base(&mut self, rng: &mut impl Rng) -> Item {
+        if self.names.contains_key(&0) {
             Item { id: 0 }
         } else {
             self.init(rng)
         }
     }
 
-    pub fn mix(&self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
+    pub fn mix(&mut self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
         let key = canonical_pair(&input.0, &input.1);
 
-        if let Some(entry) = self.receipes.get_sync(&key) {
-            return entry.get().clone();
+        if let Some(item) = self.receipes.get(&key) {
+            return item.clone();
         }
 
         let item = self.discover(rng, input);
 
-        self.receipes
-            .entry_sync(input.clone())
-            .or_insert(item)
-            .get()
-            .clone()
+        self.receipes.entry(input.clone()).or_insert(item).clone()
     }
 
-    fn discover(&self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
+    fn discover(&mut self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
         let (right, left) = input;
         // Level spread, more like a lower level
         let right_level = self.safe_level(right.id);
@@ -70,14 +66,11 @@ impl Atlas {
         let max_level = right_level.max(left_level) + 1;
         let level = min_level + rng.random_range(0..=max_level - min_level);
 
-        let item = Item {
-            id: self
-                .increment
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-        };
+        let item = Item { id: self.increment };
+        self.increment += 1;
 
-        self.names.upsert_sync(item.id, generate_name(rng));
-        self.values.upsert_sync(
+        self.names.insert(item.id, generate_name(rng));
+        self.values.insert(
             item.id,
             generate_value(
                 self.safe_value(right.id),
@@ -86,30 +79,32 @@ impl Atlas {
                 rng,
             ),
         );
-        self.levels.upsert_sync(item.id, level);
+        self.levels.insert(item.id, level);
         self.receipes
-            .upsert_sync((right.clone(), left.clone()), item.clone());
+            .insert((right.clone(), left.clone()), item.clone());
 
         item
     }
 
     pub fn safe_name(&self, id: ItemId) -> String {
-        self.names.get_sync(&id).map_or_else(
-            || format!("Unknown Item #{}", id),
-            |name| name.get().clone(),
-        )
+        self.names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| format!("Unknown Item #{}", id))
     }
 
     pub fn safe_value(&self, id: ItemId) -> usize {
-        self.values
-            .get_sync(&id)
-            .map_or_else(|| 1, |value| *value.get())
+        self.values.get(&id).copied().unwrap_or(1)
     }
 
     pub fn safe_level(&self, id: ItemId) -> usize {
-        self.levels
-            .get_sync(&id)
-            .map_or_else(|| 1, |level| *level.get())
+        self.levels.get(&id).copied().unwrap_or(1)
+    }
+}
+
+impl Default for Atlas {
+    fn default() -> Self {
+        Self::new()
     }
 }
 fn canonical_pair(a: &Item, b: &Item) -> (Item, Item) {
@@ -175,50 +170,64 @@ impl ItemExtAtlas for Item {
 }
 
 pub trait Mix {
-    fn mix(&self, rng: &mut impl Rng, atlas: &Atlas) -> Self;
-    fn fmix(&self, rng: &mut impl Rng, atlas: &Atlas) -> String;
+    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> Self;
+    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> String;
 }
 
 impl Mix for (Item, Item) {
-    fn mix(&self, rng: &mut impl Rng, atlas: &Atlas) -> Self {
+    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> Self {
         let mixed_item = atlas.mix(rng, self);
         (self.0.clone(), mixed_item)
     }
 
-    fn fmix(&self, rng: &mut impl Rng, atlas: &Atlas) -> String {
+    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> String {
         let mixed_item = self.mix(rng, atlas);
         format!(
             "Recipe: {}({}) + {}({}) => {}({})",
-            self.0.capitalize_atlas(&atlas),
-            self.0.value_atlas(&atlas),
-            self.1.capitalize_atlas(&atlas),
-            self.1.value_atlas(&atlas),
-            mixed_item.1.capitalize_atlas(&atlas),
-            mixed_item.1.value_atlas(&atlas)
+            self.0.capitalize_atlas(atlas),
+            self.0.value_atlas(atlas),
+            self.1.capitalize_atlas(atlas),
+            self.1.value_atlas(atlas),
+            mixed_item.1.capitalize_atlas(atlas),
+            mixed_item.1.value_atlas(atlas)
         )
     }
 }
 
 #[cfg(test)]
 mod atlas_tests {
+    use rand::SeedableRng;
+
     use super::*;
 
     #[test]
     fn test_name() {
-        let mut rng = rand::rng();
+        let mut rng = rand::rngs::Xoshiro128PlusPlus::from_seed([0; 16]);
         let name = generate_name(&mut rng);
         println!("Generated name: {}", name);
     }
 
     #[test]
     fn test_mix() {
-        let mut rng = rand::rng();
-        let atlas = Atlas::new();
+        let mut rng = rand::rngs::Xoshiro128PlusPlus::from_seed([0; 16]);
+        let mut atlas = Atlas::new();
         let base = atlas.init(&mut rng);
         let child = atlas.mix(&mut rng, &(base.clone(), base.clone()));
-        println!("{}", (base.clone(), base.clone()).fmix(&mut rng, &atlas));
-        println!("{}", (base.clone(), child.clone()).fmix(&mut rng, &atlas));
-        println!("{}", (child.clone(), base.clone()).fmix(&mut rng, &atlas));
-        println!("{}", (child.clone(), child.clone()).fmix(&mut rng, &atlas));
+        println!(
+            "{}",
+            (base.clone(), base.clone()).fmix(&mut rng, &mut atlas)
+        );
+        println!(
+            "{}",
+            (base.clone(), child.clone()).fmix(&mut rng, &mut atlas)
+        );
+        println!(
+            "{}",
+            (child.clone(), base.clone()).fmix(&mut rng, &mut atlas)
+        );
+        println!(
+            "{}",
+            (child.clone(), child.clone()).fmix(&mut rng, &mut atlas)
+        );
     }
 }
