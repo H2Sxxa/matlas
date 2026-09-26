@@ -7,7 +7,7 @@ pub mod generator;
 pub mod inbound;
 pub mod mixturer;
 pub mod outbound;
-pub mod transport;
+pub mod belt;
 
 pub trait NodeBehavior {
     const NAME: &'static str;
@@ -33,7 +33,7 @@ pub enum NodeObject {
     Inbound(inbound::InBoundNode),
     Outbound(outbound::OutBoundNode),
     Mixer(mixturer::MixturerNode),
-    Transport(transport::TransportNode),
+    Transport(belt::BeltNode),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

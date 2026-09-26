@@ -3,22 +3,22 @@ use serde::{Deserialize, Serialize};
 use crate::{context::NodeContext, item::Item, node::NodeBehavior};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransportNode(Option<Item>);
+pub struct BeltNode(Option<Item>);
 
-impl TransportNode {
+impl BeltNode {
     pub fn new() -> Self {
         Self(None)
     }
 }
 
-impl Default for TransportNode {
+impl Default for BeltNode {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl NodeBehavior for TransportNode {
-    const NAME: &'static str = "Transport";
+impl NodeBehavior for BeltNode {
+    const NAME: &'static str = "Belt";
 
     fn eval(&mut self, _context: &mut NodeContext) {
         // Transport Node has no evaluation logic, it simply holds an item for transport.

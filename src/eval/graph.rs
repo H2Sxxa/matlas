@@ -190,8 +190,8 @@ mod tests {
         context::NodeContext,
         entity::{atlas::Atlas, repo::Repo},
         node::{
-            Direction, Node, NodeObject, Pos, generator::GeneratorNode, inbound::InBoundNode,
-            mixturer::MixturerNode, outbound::OutBoundNode, transport::TransportNode,
+            Direction, Node, NodeObject, Pos, belt::BeltNode, generator::GeneratorNode,
+            inbound::InBoundNode, mixturer::MixturerNode, outbound::OutBoundNode,
         },
         rng::Rng,
     };
@@ -217,10 +217,7 @@ mod tests {
         graph
             .insert(
                 Pos { x: 1, y: 0 },
-                Node::new(
-                    NodeObject::Transport(TransportNode::new()),
-                    Direction::Right,
-                ),
+                Node::new(NodeObject::Transport(BeltNode::new()), Direction::Right),
             )
             .unwrap();
         graph
@@ -297,7 +294,7 @@ mod tests {
         graph
             .insert(
                 Pos { x: 1, y: 1 },
-                Node::new(NodeObject::Transport(TransportNode::new()), Direction::Up),
+                Node::new(NodeObject::Transport(BeltNode::new()), Direction::Up),
             )
             .unwrap();
         graph
@@ -315,6 +312,48 @@ mod tests {
 
         assert_eq!(context.repo.count(0), 0);
         assert_eq!(context.repo.count(1), 1);
+    }
+    // G
+    // MO
+    // G
+    #[test]
+    fn two_generators_feed_mixer_and_store_material_metadata() {
+        let mut graph = Graph::new((2, 3));
+        graph
+            .insert(
+                Pos { x: 0, y: 0 },
+                Node::new(NodeObject::Generator(GeneratorNode::new()), Direction::Down),
+            )
+            .unwrap();
+        graph
+            .insert(
+                Pos { x: 0, y: 1 },
+                Node::new(NodeObject::Mixer(MixturerNode::new()), Direction::Right),
+            )
+            .unwrap();
+        graph
+            .insert(
+                Pos { x: 1, y: 1 },
+                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
+            )
+            .unwrap();
+        graph
+            .insert(
+                Pos { x: 0, y: 2 },
+                Node::new(NodeObject::Generator(GeneratorNode::new()), Direction::Up),
+            )
+            .unwrap();
+        let mut context = context();
+
+        for _ in 0..3 {
+            graph.tick(&mut context).unwrap();
+        }
+
+        let item_id = 1;
+        assert_eq!(context.repo.count(item_id), 1);
+        assert!(!context.atlas.safe_name(item_id).is_empty());
+        assert!(context.atlas.safe_level(item_id) >= 1);
+        assert!(context.atlas.safe_value(item_id) >= 1);
     }
 
     #[test]
