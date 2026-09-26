@@ -44,19 +44,19 @@ impl Atlas {
         }
     }
 
-    pub fn mix(&mut self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
+    pub fn mix(&mut self, rng: &mut impl Rng, input: &(Item, Item), luck: f64) -> Item {
         let key = canonical_pair(&input.0, &input.1);
 
         if let Some(item) = self.receipes.get(&key) {
             return item.clone();
         }
 
-        let item = self.discover(rng, input);
+        let item = self.discover(rng, input, luck);
 
         self.receipes.entry(input.clone()).or_insert(item).clone()
     }
 
-    fn discover(&mut self, rng: &mut impl Rng, input: &(Item, Item)) -> Item {
+    fn discover(&mut self, rng: &mut impl Rng, input: &(Item, Item), luck: f64) -> Item {
         let (right, left) = input;
         // Level spread, more like a lower level
         let right_level = self.safe_level(right.id);
@@ -64,7 +64,7 @@ impl Atlas {
 
         let min_level = right_level.min(left_level);
         let max_level = right_level.max(left_level) + 1;
-        let level = min_level + rng.random_range(0..=max_level - min_level);
+        let level = min_level + biased_index(rng, max_level - min_level + 1, luck);
 
         let item = Item { id: self.increment };
         self.increment += 1;
@@ -77,6 +77,7 @@ impl Atlas {
                 self.safe_value(left.id),
                 level,
                 rng,
+                luck,
             ),
         );
         self.levels.insert(item.id, level);
@@ -100,6 +101,18 @@ impl Atlas {
     pub fn safe_level(&self, id: ItemId) -> usize {
         self.levels.get(&id).copied().unwrap_or(1)
     }
+
+    pub fn item_count(&self) -> usize {
+        self.names.len()
+    }
+
+    pub fn max_level(&self) -> usize {
+        self.levels.values().copied().max().unwrap_or(0)
+    }
+
+    pub fn max_value(&self) -> usize {
+        self.values.values().copied().max().unwrap_or(0)
+    }
 }
 
 impl Default for Atlas {
@@ -114,12 +127,25 @@ fn canonical_pair(a: &Item, b: &Item) -> (Item, Item) {
         (b.clone(), a.clone())
     }
 }
-fn generate_value(left: usize, right: usize, level: usize, rng: &mut impl Rng) -> usize {
+fn generate_value(left: usize, right: usize, level: usize, rng: &mut impl Rng, luck: f64) -> usize {
     let parent = (left + right) as f64;
     let base = parent * 1.5;
     let spread = 0.15 + 0.65 * (1.0 - (-0.3 * level as f64).exp());
-    let factor = 1.0 + rng.random_range(-spread..=spread);
+    let factor = 1.0 + (biased_unit(rng, luck) * 2.0 - 1.0) * spread;
     (base * factor).round().max(1.0) as usize
+}
+
+// Draws a uniform value in [0.0, 1.0] with `luck` added and clamped to the range.
+// Negative luck works too; zero reproduces the plain uniform draw.
+fn biased_unit(rng: &mut impl Rng, luck: f64) -> f64 {
+    (rng.random_range(0.0..1.0) + luck).clamp(0.0, 1.0)
+}
+
+fn biased_index(rng: &mut impl Rng, len: usize, luck: f64) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    ((biased_unit(rng, luck) * len as f64) as usize).min(len - 1)
 }
 
 const SYLLABLES: &[&str] = &[
@@ -170,18 +196,18 @@ impl ItemExtAtlas for Item {
 }
 
 pub trait Mix {
-    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> Self;
-    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> String;
+    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas, luck: f64) -> Self;
+    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas, luck: f64) -> String;
 }
 
 impl Mix for (Item, Item) {
-    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> Self {
-        let mixed_item = atlas.mix(rng, self);
+    fn mix(&self, rng: &mut impl Rng, atlas: &mut Atlas, luck: f64) -> Self {
+        let mixed_item = atlas.mix(rng, self, luck);
         (self.0.clone(), mixed_item)
     }
 
-    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas) -> String {
-        let mixed_item = self.mix(rng, atlas);
+    fn fmix(&self, rng: &mut impl Rng, atlas: &mut Atlas, luck: f64) -> String {
+        let mixed_item = self.mix(rng, atlas, luck);
         format!(
             "Recipe: {}({}) + {}({}) => {}({})",
             self.0.capitalize_atlas(atlas),
@@ -212,22 +238,22 @@ mod atlas_tests {
         let mut rng = rand::rngs::Xoshiro128PlusPlus::from_seed([0; 16]);
         let mut atlas = Atlas::new();
         let base = atlas.init(&mut rng);
-        let child = atlas.mix(&mut rng, &(base.clone(), base.clone()));
+        let child = atlas.mix(&mut rng, &(base.clone(), base.clone()), 0.0);
         println!(
             "{}",
-            (base.clone(), base.clone()).fmix(&mut rng, &mut atlas)
+            (base.clone(), base.clone()).fmix(&mut rng, &mut atlas, 0.0)
         );
         println!(
             "{}",
-            (base.clone(), child.clone()).fmix(&mut rng, &mut atlas)
+            (base.clone(), child.clone()).fmix(&mut rng, &mut atlas, 0.0)
         );
         println!(
             "{}",
-            (child.clone(), base.clone()).fmix(&mut rng, &mut atlas)
+            (child.clone(), base.clone()).fmix(&mut rng, &mut atlas, 0.0)
         );
         println!(
             "{}",
-            (child.clone(), child.clone()).fmix(&mut rng, &mut atlas)
+            (child.clone(), child.clone()).fmix(&mut rng, &mut atlas, 0.0)
         );
     }
 }

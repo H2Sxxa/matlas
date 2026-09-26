@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    entity::{atlas::Atlas, repo::Repo},
+    entity::{atlas::Atlas, repo::Repo, stats::Stats},
     rng::Rng,
 };
 
@@ -11,10 +11,16 @@ pub struct NodeContext {
     pub atlas: Atlas,
     pub repo: Repo,
     pub rng: Rng,
+    pub stats: Stats,
 }
 
 impl NodeContext {
-    pub fn new(atlas: Atlas, repo: Repo, rng: Rng) -> Self {
-        Self { atlas, repo, rng }
+    pub fn new(atlas: Atlas, repo: Repo, rng: Rng, stats: Stats) -> Self {
+        Self {
+            atlas,
+            repo,
+            rng,
+            stats,
+        }
     }
 }

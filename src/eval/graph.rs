@@ -70,6 +70,59 @@ impl Graph {
         Ok(None)
     }
 
+    pub fn size(&self) -> (usize, usize) {
+        self.size
+    }
+
+    /// Removes the node at `pos` and returns it, keeping the grid dense by moving
+    /// the last node into the freed slot.
+    pub fn remove(&mut self, pos: &Pos) -> Option<Node> {
+        let node_id = self.node_id(pos)?;
+        let pos_index = self.grid_index(pos);
+        self.grid[pos_index] = EMPTY_NODE;
+
+        let removed = self.nodes.swap_remove(node_id);
+        self.positions.swap_remove(node_id);
+        if node_id < self.nodes.len() {
+            let moved_pos = self.positions[node_id];
+            let moved_index = self.grid_index(&moved_pos);
+            self.grid[moved_index] = node_id;
+        }
+
+        self.order_dirty = true;
+        Some(removed)
+    }
+
+    /// Enlarges the grid, keeping every node where it is. Only growth is offered
+    /// because rewards never shrink the factory.
+    pub fn grow(&mut self, extra_width: usize, extra_height: usize) -> (usize, usize) {
+        let next = (
+            self.size
+                .0
+                .checked_add(extra_width)
+                .expect("graph width overflow"),
+            self.size
+                .1
+                .checked_add(extra_height)
+                .expect("graph height overflow"),
+        );
+        if next == self.size {
+            return self.size;
+        }
+
+        let cell_count = next
+            .0
+            .checked_mul(next.1)
+            .expect("graph dimensions overflow usize");
+        let mut grid = vec![EMPTY_NODE; cell_count];
+        for (node_id, pos) in self.positions.iter().enumerate() {
+            grid[pos.y * next.0 + pos.x] = node_id;
+        }
+        self.grid = grid;
+        self.size = next;
+        next
+    }
+
     pub fn node(&self, pos: &Pos) -> Option<&Node> {
         self.node_id(pos).map(|node_id| &self.nodes[node_id])
     }
@@ -382,5 +435,30 @@ mod tests {
         let error = graph.insert(pos, generator(Direction::Right)).unwrap_err();
 
         assert_eq!(error, GraphError::PositionOutOfBounds { pos, size: (2, 1) });
+    }
+
+    // (0,0) G>  (1,0) B>  (2,0) I
+    // Legend: G generator | B belt | I inbound | > facing right.
+    // Removing the generator moves the inbound into its dense slot. Rebuilding the
+    // line afterwards must still route items through the belt by position.
+    #[test]
+    fn removing_a_node_keeps_the_rest_of_the_grid_addressable() {
+        let mut graph = graph((3, 1));
+        place(&mut graph, Pos { x: 0, y: 0 }, generator(Direction::Right));
+        place(&mut graph, Pos { x: 1, y: 0 }, belt(Direction::Right));
+        place(&mut graph, Pos { x: 2, y: 0 }, inbound(Direction::Right));
+
+        assert!(graph.remove(&Pos { x: 0, y: 0 }).is_some());
+        assert!(graph.node(&Pos { x: 0, y: 0 }).is_none());
+        assert!(graph.node(&Pos { x: 1, y: 0 }).is_some());
+        assert!(graph.node(&Pos { x: 2, y: 0 }).is_some());
+
+        place(&mut graph, Pos { x: 0, y: 0 }, generator(Direction::Right));
+        let mut context = context();
+        // Two edges plus the inbound drain: the first item lands in the repository on
+        // the third tick, the second on the fourth.
+        ticks(&mut graph, &mut context, 4);
+
+        assert_eq!(context.repo.count(0), 2);
     }
 }

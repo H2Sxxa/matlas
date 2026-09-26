@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use crate::{context::NodeContext, item::Item, node::NodeBehavior, rng::RandomType};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MixturerNode {
     in0: Option<Item>,
@@ -35,7 +35,9 @@ impl NodeBehavior for MixturerNode {
         let a = self.in0.take().expect("mixer input 0 was checked");
         let b = self.in1.take().expect("mixer input 1 was checked");
 
-        self.out = Some(context.atlas.mix(&mut context.rng.discover, &(a, b)))
+        let luck = context.rng.luck(RandomType::Discover);
+        self.out = Some(context.atlas.mix(&mut context.rng.discover, &(a, b), luck));
+        context.stats.record_craft();
     }
 
     fn take_output(&mut self) -> Option<Item> {

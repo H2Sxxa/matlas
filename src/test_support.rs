@@ -6,24 +6,24 @@
 //
 // Legend:
 //   G generator | B belt (transport) | M mixer | I inbound | O outbound
-//   D distributor | V overflow | . empty cell
+//   D distributor | V overflow | S sell | . empty cell
 //   > v < ^ node facing (right, down, up, left)
 
 use crate::{
     context::NodeContext,
-    entity::{atlas::Atlas, repo::Repo},
+    entity::{atlas::Atlas, repo::Repo, stats::Stats},
     eval::graph::Graph,
     item::{Item, ItemId},
     node::{
         Direction, Node, NodeObject, Pos, belt::BeltNode, distributor::DistributorNode,
         generator::GeneratorNode, inbound::InBoundNode, mixturer::MixturerNode,
-        outbound::OutBoundNode, overflow::OverflowNode,
+        outbound::OutBoundNode, overflow::OverflowNode, sell::SellNode,
     },
     rng::Rng,
 };
 
 pub fn context() -> NodeContext {
-    NodeContext::new(Atlas::new(), Repo::new(), Rng::new([0; 16]))
+    NodeContext::new(Atlas::new(), Repo::new(), Rng::new([0; 16]), Stats::new())
 }
 
 pub fn graph(size: (usize, usize)) -> Graph {
@@ -62,6 +62,10 @@ pub fn distributor(direction: Direction) -> Node {
 
 pub fn overflow(direction: Direction) -> Node {
     Node::new(NodeObject::Overflow(OverflowNode::new()), direction)
+}
+
+pub fn sell(direction: Direction) -> Node {
+    Node::new(NodeObject::Sell(SellNode::new()), direction)
 }
 
 pub fn tick(graph: &mut Graph, context: &mut NodeContext) {

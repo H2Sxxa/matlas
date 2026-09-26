@@ -11,6 +11,7 @@ pub mod inbound;
 pub mod mixturer;
 pub mod outbound;
 pub mod overflow;
+pub mod sell;
 
 pub const MAX_OUTPUT_DIRECTIONS: usize = 3;
 
@@ -50,6 +51,7 @@ pub enum NodeObject {
     Transport(belt::BeltNode),
     Distributor(distributor::DistributorNode),
     Overflow(overflow::OverflowNode),
+    Sell(sell::SellNode),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +74,7 @@ impl Node {
             NodeObject::Transport(node) => node.eval(context),
             NodeObject::Distributor(node) => node.eval(context),
             NodeObject::Overflow(node) => node.eval(context),
+            NodeObject::Sell(node) => node.eval(context),
         }
     }
 
@@ -84,6 +87,7 @@ impl Node {
             NodeObject::Transport(node) => node.take_output(),
             NodeObject::Distributor(node) => node.take_output(),
             NodeObject::Overflow(node) => node.take_output(),
+            NodeObject::Sell(node) => node.take_output(),
         }
     }
 
@@ -96,6 +100,7 @@ impl Node {
             NodeObject::Transport(node) => node.restore_output(item),
             NodeObject::Distributor(node) => node.restore_output(item),
             NodeObject::Overflow(node) => node.restore_output(item),
+            NodeObject::Sell(node) => node.restore_output(item),
         }
     }
 
@@ -108,6 +113,7 @@ impl Node {
             NodeObject::Transport(node) => node.accept(item),
             NodeObject::Distributor(node) => node.accept(item),
             NodeObject::Overflow(node) => node.accept(item),
+            NodeObject::Sell(node) => node.accept(item),
         }
     }
 
@@ -120,6 +126,7 @@ impl Node {
             NodeObject::Transport(node) => node.input_capacity(),
             NodeObject::Distributor(node) => node.input_capacity(),
             NodeObject::Overflow(node) => node.input_capacity(),
+            NodeObject::Sell(node) => node.input_capacity(),
         }
     }
 
@@ -136,6 +143,7 @@ impl Node {
             NodeObject::Transport(node) => node.output_directions(self.direction),
             NodeObject::Distributor(node) => node.output_directions(self.direction),
             NodeObject::Overflow(node) => node.output_directions(self.direction),
+            NodeObject::Sell(node) => node.output_directions(self.direction),
         }
     }
 
@@ -149,6 +157,7 @@ impl Node {
             NodeObject::Transport(node) => node.confirm_output(output_direction, facing),
             NodeObject::Distributor(node) => node.confirm_output(output_direction, facing),
             NodeObject::Overflow(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Sell(node) => node.confirm_output(output_direction, facing),
         }
     }
 }

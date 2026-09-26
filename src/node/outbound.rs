@@ -24,11 +24,13 @@ impl NodeBehavior for OutBoundNode {
     const NAME: &'static str = "OutBound";
 
     fn eval(&mut self, context: &mut NodeContext) {
-        if self.out.is_none()
-            && let Some(item) = context.repo.outbound(self.outid)
-        {
-            self.out = Some(item);
+        if self.out.is_some() {
+            return;
         }
+        let Some(item) = context.repo.outbound(self.outid) else {
+            return;
+        };
+        self.out = Some(item);
     }
 
     fn take_output(&mut self) -> Option<Item> {

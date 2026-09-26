@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use matlas::{
     context::NodeContext,
-    entity::{atlas::Atlas, repo::Repo},
+    entity::{atlas::Atlas, repo::Repo, stats::Stats},
     eval::graph::Graph,
     item::ItemId,
     node::{Direction, Node, NodeObject, Pos, belt::BeltNode, outbound::OutBoundNode},
@@ -47,7 +47,7 @@ fn main() {
             .expect("outbound positions stay inside the benchmark graph");
     }
 
-    let mut context = NodeContext::new(Atlas::new(), Repo::new(), Rng::new([0; 16]));
+    let mut context = NodeContext::new(Atlas::new(), Repo::new(), Rng::new([0; 16]), Stats::new());
     for item_id in 0..belt_count {
         context.repo.inbound(item_id as ItemId);
     }
