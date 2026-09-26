@@ -6,6 +6,18 @@ pub struct InBoundNode {
     ins: Vec<Item>,
 }
 
+impl InBoundNode {
+    pub fn new() -> Self {
+        Self { ins: Vec::new() }
+    }
+}
+
+impl Default for InBoundNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeBehavior for InBoundNode {
     const NAME: &'static str = "InBound";
 
@@ -15,5 +27,12 @@ impl NodeBehavior for InBoundNode {
         }
     }
 
-    // Inbound has no output, so no push
+    fn accept(&mut self, item: Item) -> Option<Item> {
+        self.ins.push(item);
+        None
+    }
+
+    fn input_capacity(&self) -> usize {
+        usize::MAX
+    }
 }

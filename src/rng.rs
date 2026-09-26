@@ -62,6 +62,6 @@ fn derive_seed(master: [u8; 16], namespace: &[u8]) -> [u8; 16] {
     hasher.update(&master);
     hasher.update(namespace);
     let hash = hasher.finalize();
-    seed.copy_from_slice(hash.as_bytes());
+    seed.copy_from_slice(&hash.as_bytes()[..16]);
     seed
 }

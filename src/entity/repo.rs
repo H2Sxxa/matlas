@@ -24,15 +24,18 @@ impl Repo {
     }
 
     pub fn outbound(&self, item_id: ItemId) -> Option<Item> {
-        if let Some(count) = self.inner.get_sync(&item_id) {
-            if *count > 0 {
-                self.inner
-                    .entry_sync(item_id)
-                    .and_modify(|v| *v -= 1)
-                    .or_insert(0);
-                return Some(Item { id: item_id });
-            }
+        let mut count = self.inner.entry_sync(item_id).or_insert(0);
+        if *count == 0 {
+            None
+        } else {
+            *count -= 1;
+            Some(Item { id: item_id })
         }
-        None
+    }
+
+    pub fn count(&self, item_id: ItemId) -> Count {
+        self.inner
+            .get_sync(&item_id)
+            .map_or(0, |count| *count.get())
     }
 }

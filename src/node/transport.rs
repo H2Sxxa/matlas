@@ -1,13 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    context::NodeContext,
-    item::Item,
-    node::{NodeBehavior, NodeObject},
-};
+use crate::{context::NodeContext, item::Item, node::NodeBehavior};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransportNode(Option<Item>);
+
+impl TransportNode {
+    pub fn new() -> Self {
+        Self(None)
+    }
+}
+
+impl Default for TransportNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NodeBehavior for TransportNode {
     const NAME: &'static str = "Transport";
@@ -16,8 +24,29 @@ impl NodeBehavior for TransportNode {
         // Transport Node has no evaluation logic, it simply holds an item for transport.
     }
 
-    fn push(&mut self, _context: &mut NodeContext, _next: Option<NodeObject>) {
-        // Transport Node just hold 1 item, how to push to anothoer node is not defined yet.
-        todo!("Transport push");
+    fn take_output(&mut self) -> Option<Item> {
+        self.0.take()
+    }
+
+    fn restore_output(&mut self, item: Item) -> Result<(), Item> {
+        if self.0.is_none() {
+            self.0 = Some(item);
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
+
+    fn accept(&mut self, item: Item) -> Option<Item> {
+        if self.0.is_none() {
+            self.0 = Some(item);
+            None
+        } else {
+            Some(item)
+        }
+    }
+
+    fn input_capacity(&self) -> usize {
+        usize::from(self.0.is_none())
     }
 }

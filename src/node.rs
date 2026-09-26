@@ -1,11 +1,7 @@
-// Definition of Node
-// 1. Each Node has a direction, and can be connected to other nodes
-// 2. Each Node has a type, which defines its behavior
-// 3. Each Node will try to push its output to its direction next node, if it exists
-// 4. Each Node will eval to generate its output when it got push and satify its input requirements, then start countdown,when reamning 0, it will push.
+// Nodes own their local input and output buffers. Graph owns movement between nodes.
 use std::ops::Add;
 
-use crate::context::NodeContext;
+use crate::{context::NodeContext, item::Item};
 use serde::{Deserialize, Serialize};
 pub mod generator;
 pub mod inbound;
@@ -16,7 +12,18 @@ pub mod transport;
 pub trait NodeBehavior {
     const NAME: &'static str;
     fn eval(&mut self, _context: &mut NodeContext) {}
-    fn push(&mut self, _context: &mut NodeContext, _next: Option<NodeObject>) {}
+    fn take_output(&mut self) -> Option<Item> {
+        None
+    }
+    fn restore_output(&mut self, item: Item) -> Result<(), Item> {
+        Err(item)
+    }
+    fn accept(&mut self, item: Item) -> Option<Item> {
+        Some(item)
+    }
+    fn input_capacity(&self) -> usize {
+        0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +40,66 @@ pub enum NodeObject {
 pub struct Node {
     pub object: NodeObject,
     pub direction: Direction,
+}
+
+impl Node {
+    pub fn new(object: NodeObject, direction: Direction) -> Self {
+        Self { object, direction }
+    }
+
+    pub fn eval(&mut self, context: &mut NodeContext) {
+        match &mut self.object {
+            NodeObject::Generator(node) => node.eval(context),
+            NodeObject::Inbound(node) => node.eval(context),
+            NodeObject::Outbound(node) => node.eval(context),
+            NodeObject::Mixer(node) => node.eval(context),
+            NodeObject::Transport(node) => node.eval(context),
+        }
+    }
+
+    pub fn take_output(&mut self) -> Option<Item> {
+        match &mut self.object {
+            NodeObject::Generator(node) => node.take_output(),
+            NodeObject::Inbound(node) => node.take_output(),
+            NodeObject::Outbound(node) => node.take_output(),
+            NodeObject::Mixer(node) => node.take_output(),
+            NodeObject::Transport(node) => node.take_output(),
+        }
+    }
+
+    pub fn restore_output(&mut self, item: Item) -> Result<(), Item> {
+        match &mut self.object {
+            NodeObject::Generator(node) => node.restore_output(item),
+            NodeObject::Inbound(node) => node.restore_output(item),
+            NodeObject::Outbound(node) => node.restore_output(item),
+            NodeObject::Mixer(node) => node.restore_output(item),
+            NodeObject::Transport(node) => node.restore_output(item),
+        }
+    }
+
+    pub fn accept(&mut self, item: Item) -> Option<Item> {
+        match &mut self.object {
+            NodeObject::Generator(node) => node.accept(item),
+            NodeObject::Inbound(node) => node.accept(item),
+            NodeObject::Outbound(node) => node.accept(item),
+            NodeObject::Mixer(node) => node.accept(item),
+            NodeObject::Transport(node) => node.accept(item),
+        }
+    }
+
+    pub fn input_capacity(&self) -> usize {
+        match &self.object {
+            NodeObject::Generator(node) => node.input_capacity(),
+            NodeObject::Inbound(node) => node.input_capacity(),
+            NodeObject::Outbound(node) => node.input_capacity(),
+            NodeObject::Mixer(node) => node.input_capacity(),
+            NodeObject::Transport(node) => node.input_capacity(),
+        }
+    }
+
+    pub fn is_transport(&self) -> bool {
+        matches!(self.object, NodeObject::Transport(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
