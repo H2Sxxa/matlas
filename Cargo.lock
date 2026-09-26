@@ -146,6 +146,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "matlas"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "humfmt",
+ "rand",
+ "scc",
+ "serde",
+ "uuid",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -296,19 +309,6 @@ checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "varerr"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "blake3",
- "humfmt",
- "rand",
- "scc",
- "serde",
- "uuid",
 ]
 
 [[package]]
