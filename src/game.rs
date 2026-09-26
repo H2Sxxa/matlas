@@ -17,7 +17,27 @@ use crate::{
     loot::{self, OFFER_COUNT, Reward, RewardOffer},
     node::{Direction, Node, Pos},
     rng::Rng,
+    view::GameView,
 };
+
+// The machines a fresh run begins with.
+//
+// A run cannot bootstrap itself. Goals measure crafted items, revenue and
+// discoveries, and none of those move while the grid is empty, so loot can never
+// hand out the first machine. The kit is what turns an empty grid into a working
+// factory: two generators feed belts into a mixer, and a belt carries the result
+// into an inbound or a sell, depending on the goal.
+pub const STARTING_KIT: [MachineKind; 9] = [
+    MachineKind::Generator,
+    MachineKind::Generator,
+    MachineKind::Belt,
+    MachineKind::Belt,
+    MachineKind::Belt,
+    MachineKind::Belt,
+    MachineKind::Mixer,
+    MachineKind::Inbound,
+    MachineKind::Sell,
+];
 
 // Owns the factory and the meta systems around it. The goal chain, the relics and
 // the machine stock live here so that claiming a reward can touch the graph and
@@ -108,6 +128,26 @@ impl Game {
         self.graph.tick(&mut self.context)?;
         self.refresh_goal();
         Ok(())
+    }
+
+    // Starts a run with a working factory instead of an empty grid.
+    //
+    // `extra_slots` is how many machines loot may still hand out beyond the kit, so
+    // a run always starts with room for a few machine rewards.
+    pub fn start(seed: [u8; 16], size: (usize, usize), extra_slots: usize) -> Self {
+        let mut game = Self::new(seed, size, STARTING_KIT.len() + extra_slots);
+        for kind in STARTING_KIT {
+            game.machines
+                .grant(kind)
+                .expect("the kit fits the capacity it sizes");
+        }
+        game
+    }
+
+    // Snapshots the run for a presentation layer. The simulation is only borrowed,
+    // so a renderer can call this as often as it likes.
+    pub fn view(&self) -> GameView {
+        GameView::build(self)
     }
 
     // Rolls reward offers once the current goal is met. Offers stay pending until
@@ -206,7 +246,7 @@ mod tests {
         entity::relics::Relic,
         eval::graph::GraphError,
         loot::{GraphExpansion, Reward},
-        node::{Direction, NodeObject, Pos},
+        node::{Direction, Node, NodeObject, Pos, outbound::OutBoundNode},
         rng::RandomType,
     };
 
@@ -296,5 +336,57 @@ mod tests {
                 owned: 1,
             }))
         );
+    }
+
+    // A run has to survive a save and a load, which is what the front end keeps in
+    // storage. Every node type has to round trip, because nodes cross as an
+    // internally tagged enum and that representation is picky about its variants.
+    #[test]
+    fn a_run_round_trips_through_its_saved_form() {
+        let mut game = Game::start([4; 16], (8, 4), 2);
+        // The kit covers the basic loop; the routers only arrive as loot.
+        for kind in [MachineKind::Distributor, MachineKind::Overflow] {
+            game.machines
+                .grant(kind)
+                .expect("the run has a slot open for each router");
+        }
+        let layout = [
+            (MachineKind::Generator, Direction::Right),
+            (MachineKind::Belt, Direction::Right),
+            (MachineKind::Mixer, Direction::Down),
+            (MachineKind::Inbound, Direction::Left),
+            (MachineKind::Distributor, Direction::Up),
+            (MachineKind::Overflow, Direction::Right),
+            (MachineKind::Sell, Direction::Down),
+        ];
+        for (index, (kind, direction)) in layout.into_iter().enumerate() {
+            game.place_machine(kind, Pos { x: index, y: 0 }, direction)
+                .expect("the kit machines cover the layout");
+        }
+        game.graph
+            .insert(
+                Pos { x: 0, y: 1 },
+                Node::new(NodeObject::Outbound(OutBoundNode::new(0)), Direction::Right),
+            )
+            .expect("the outbound position is inside the grid");
+
+        // Enough ticks to fill the buffers and let the mixer craft: a save has to
+        // carry the grid, the node buffers and the recipe table.
+        for _ in 0..6 {
+            game.tick().expect("the layout stays inside the grid");
+        }
+        assert!(
+            game.context.stats.crafted() > 0,
+            "the layout crafts an item"
+        );
+        assert!(
+            game.context.atlas.recipes().next().is_some(),
+            "the layout records a recipe"
+        );
+
+        let saved = serde_json::to_string(&game).expect("a run is serialisable");
+        let reloaded: Game = serde_json::from_str(&saved).expect("a save is loadable");
+
+        assert_eq!(reloaded.view(), game.view());
     }
 }

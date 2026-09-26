@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     context::NodeContext,
     item::{Item, ItemId},
-    node::NodeBehavior,
+    node::{NodeBehavior, NodeState},
 };
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutBoundNode {
@@ -31,6 +31,13 @@ impl NodeBehavior for OutBoundNode {
             return;
         };
         self.out = Some(item);
+    }
+
+    fn state(&self) -> NodeState {
+        NodeState {
+            held: self.out.clone(),
+            ..NodeState::default()
+        }
     }
 
     fn take_output(&mut self) -> Option<Item> {

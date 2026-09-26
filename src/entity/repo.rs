@@ -33,6 +33,15 @@ impl Repo {
     pub fn count(&self, item_id: ItemId) -> Count {
         self.counts.get(item_id).copied().unwrap_or(0)
     }
+
+    // Every item the repository currently holds, skipping the empty entries.
+    pub fn entries(&self) -> impl Iterator<Item = (ItemId, Count)> + '_ {
+        self.counts
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, count)| *count > 0)
+    }
 }
 
 impl Default for Repo {

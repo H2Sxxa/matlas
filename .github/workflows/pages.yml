@@ -1,0 +1,76 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # Pull requests run the same checks but never publish.
+  pull_request:
+  workflow_dispatch:
+
+# Publishing needs a token for the upload and an id token to prove the deployment
+# came from this workflow.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A newer push replaces an older run for the same branch. Separate branches, and the
+# pull request ref, keep their own slot so a check never cancels a deployment.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # pnpm has to be installed before setup-node, because the node cache is keyed
+      # by the pnpm lockfile.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install the front end
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the simulation
+        run: cargo test --quiet
+
+      # Builds the wasm package, type checks the front end and writes web/dist.
+      - name: Build the site
+        working-directory: web
+        run: pnpm build
+
+      # Plays a short run through the wasm module, against the package just built.
+      - name: Check the wasm boundary
+        working-directory: web
+        run: node scripts/smoke.mjs
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

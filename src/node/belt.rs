@@ -1,13 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use crate::{
+    context::NodeContext,
+    item::Item,
+    node::{NodeBehavior, NodeState},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BeltNode(Option<Item>);
+pub struct BeltNode {
+    held: Option<Item>,
+}
 
 impl BeltNode {
     pub fn new() -> Self {
-        Self(None)
+        Self { held: None }
     }
 }
 
@@ -24,13 +30,20 @@ impl NodeBehavior for BeltNode {
         // Transport Node has no evaluation logic, it simply holds an item for transport.
     }
 
+    fn state(&self) -> NodeState {
+        NodeState {
+            held: self.held.clone(),
+            ..NodeState::default()
+        }
+    }
+
     fn take_output(&mut self) -> Option<Item> {
-        self.0.take()
+        self.held.take()
     }
 
     fn restore_output(&mut self, item: Item) -> Result<(), Item> {
-        if self.0.is_none() {
-            self.0 = Some(item);
+        if self.held.is_none() {
+            self.held = Some(item);
             Ok(())
         } else {
             Err(item)
@@ -38,8 +51,8 @@ impl NodeBehavior for BeltNode {
     }
 
     fn accept(&mut self, item: Item) -> Option<Item> {
-        if self.0.is_none() {
-            self.0 = Some(item);
+        if self.held.is_none() {
+            self.held = Some(item);
             None
         } else {
             Some(item)
@@ -47,7 +60,7 @@ impl NodeBehavior for BeltNode {
     }
 
     fn input_capacity(&self) -> usize {
-        usize::from(self.0.is_none())
+        usize::from(self.held.is_none())
     }
 }
 

@@ -1,0 +1,4 @@
+# wasm-pack ships a prebuilt binary and downloads it from its install script, which
+# pnpm blocks unless the dependency is allowed to run it.
+allowBuilds:
+  wasm-pack: true

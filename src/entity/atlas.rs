@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rand::{Rng, RngExt};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::item::{CapitalizedItem, Item, ItemId};
 
@@ -10,6 +10,13 @@ pub struct Atlas {
     names: HashMap<ItemId, String>,
     levels: HashMap<ItemId, usize>,
     values: HashMap<ItemId, usize>,
+    // Recipes are keyed by an item pair, and no text format can use a pair as an
+    // object key, so the table travels as a list of pairs and is rebuilt on the way
+    // back in. The in-memory table stays a map so a lookup stays constant time.
+    #[serde(
+        serialize_with = "recipes_as_pairs",
+        deserialize_with = "recipes_from_pairs"
+    )]
     receipes: HashMap<(Item, Item), Item>,
     increment: ItemId,
 }
@@ -106,6 +113,22 @@ impl Atlas {
         self.names.len()
     }
 
+    // Every item the atlas has discovered, in no particular order.
+    pub fn ids(&self) -> impl Iterator<Item = ItemId> + '_ {
+        self.names.keys().copied()
+    }
+
+    // Every recipe the atlas has discovered, keyed by the pair that was mixed.
+    //
+    // Recipes are stored in the order they were mixed, so the same pair can appear
+    // under either order. Readers that want to list them should treat the pair as
+    // unordered.
+    pub fn recipes(&self) -> impl Iterator<Item = ((ItemId, ItemId), ItemId)> + '_ {
+        self.receipes
+            .iter()
+            .map(|((left, right), item)| ((left.id, right.id), item.id))
+    }
+
     pub fn max_level(&self) -> usize {
         self.levels.values().copied().max().unwrap_or(0)
     }
@@ -120,6 +143,25 @@ impl Default for Atlas {
         Self::new()
     }
 }
+
+fn recipes_as_pairs<S: Serializer>(
+    recipes: &HashMap<(Item, Item), Item>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    recipes
+        .iter()
+        .map(|(inputs, item)| ((inputs.0.clone(), inputs.1.clone()), item.clone()))
+        .collect::<Vec<((Item, Item), Item)>>()
+        .serialize(serializer)
+}
+
+fn recipes_from_pairs<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<HashMap<(Item, Item), Item>, D::Error> {
+    let pairs = Vec::<((Item, Item), Item)>::deserialize(deserializer)?;
+    Ok(pairs.into_iter().collect())
+}
+
 fn canonical_pair(a: &Item, b: &Item) -> (Item, Item) {
     if a.id <= b.id {
         (a.clone(), b.clone())

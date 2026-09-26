@@ -23,7 +23,7 @@ pub enum GoalKind {
     CraftCount { count: usize },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Progress {
     pub current: usize,
     pub target: usize,

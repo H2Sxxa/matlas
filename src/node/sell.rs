@@ -2,7 +2,12 @@
 //
 // Like the inbound, it accepts any number of items and drains them on eval, but
 // instead of storing them it prices each one, books the revenue and drops it.
-use crate::{context::NodeContext, item::Item, node::NodeBehavior, rng::RandomType};
+use crate::{
+    context::NodeContext,
+    item::Item,
+    node::{NodeBehavior, NodeState},
+    rng::RandomType,
+};
 use serde::{Deserialize, Serialize};
 
 // A sale pays between half and one and a half times the atlas value. The roll runs
@@ -37,6 +42,13 @@ impl NodeBehavior for SellNode {
                 .rng
                 .roll_range(RandomType::Sell, PRICE_MIN..PRICE_MAX);
             context.stats.record_revenue(value as f64 * factor);
+        }
+    }
+
+    fn state(&self) -> NodeState {
+        NodeState {
+            queued: self.ins.len(),
+            ..NodeState::default()
         }
     }
 

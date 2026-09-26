@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     item::Item,
-    node::{Direction, MAX_OUTPUT_DIRECTIONS, NodeBehavior},
+    node::{Direction, MAX_OUTPUT_DIRECTIONS, NodeBehavior, NodeState},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +29,13 @@ impl Default for OverflowNode {
 
 impl NodeBehavior for OverflowNode {
     const NAME: &'static str = "Overflow";
+
+    fn state(&self) -> NodeState {
+        NodeState {
+            held: self.out.clone(),
+            ..NodeState::default()
+        }
+    }
 
     fn take_output(&mut self) -> Option<Item> {
         self.out.take()

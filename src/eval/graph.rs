@@ -131,6 +131,18 @@ impl Graph {
         self.node_id(pos).map(|node_id| &mut self.nodes[node_id])
     }
 
+    /// Walks every placed node with its position.
+    ///
+    /// A renderer needs the whole factory rather than one cell at a time, so the
+    /// grid exposes a read-only walk instead of making callers sweep every cell.
+    pub fn iter(&self) -> impl Iterator<Item = (Pos, &Node)> {
+        self.positions.iter().copied().zip(self.nodes.iter())
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     pub fn next_pos(&self, pos: &Pos, direction: Direction) -> Option<Pos> {
         match direction {
             Direction::Right => pos.x.checked_add(1).map(|x| Pos { x, y: pos.y }),

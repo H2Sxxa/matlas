@@ -15,6 +15,25 @@ pub mod sell;
 
 pub const MAX_OUTPUT_DIRECTIONS: usize = 3;
 
+// How many input slots a node can expose. Only the mixer has more than one.
+pub const MAX_INPUT_SLOTS: usize = 2;
+
+// What a node is holding, read without touching a buffer.
+//
+// Node buffers are private, so this is the only supported way for a presentation
+// layer to see inside a node. Taking an output and putting it back works for a node
+// that buffers a single item, but it mutates the simulation, so it cannot be used
+// to render a frame.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeState {
+    // The buffered output, when the node holds one.
+    pub held: Option<Item>,
+    // Items parked in input slots, one entry per slot.
+    pub slots: [Option<Item>; MAX_INPUT_SLOTS],
+    // Items queued for the next eval, for drains that accept any number of items.
+    pub queued: usize,
+}
+
 pub trait NodeBehavior {
     const NAME: &'static str;
     fn eval(&mut self, _context: &mut NodeContext) {}
@@ -29,6 +48,10 @@ pub trait NodeBehavior {
     }
     fn input_capacity(&self) -> usize {
         0
+    }
+    // Reads the buffers without changing them.
+    fn state(&self) -> NodeState {
+        NodeState::default()
     }
     fn output_directions(
         &self,
@@ -132,6 +155,19 @@ impl Node {
 
     pub fn is_transport(&self) -> bool {
         matches!(self.object, NodeObject::Transport(_))
+    }
+
+    pub fn state(&self) -> NodeState {
+        match &self.object {
+            NodeObject::Generator(node) => node.state(),
+            NodeObject::Inbound(node) => node.state(),
+            NodeObject::Outbound(node) => node.state(),
+            NodeObject::Mixer(node) => node.state(),
+            NodeObject::Transport(node) => node.state(),
+            NodeObject::Distributor(node) => node.state(),
+            NodeObject::Overflow(node) => node.state(),
+            NodeObject::Sell(node) => node.state(),
+        }
     }
 
     pub fn output_directions(&self) -> ArrayVec<Direction, MAX_OUTPUT_DIRECTIONS> {

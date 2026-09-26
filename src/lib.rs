@@ -6,6 +6,7 @@ pub mod item;
 pub mod loot;
 pub mod node;
 pub mod rng;
+pub mod view;
 
 #[cfg(test)]
 mod test_support;

@@ -1,5 +1,9 @@
 // Generator will push Item / tick
-use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use crate::{
+    context::NodeContext,
+    item::Item,
+    node::{NodeBehavior, NodeState},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +29,13 @@ impl NodeBehavior for GeneratorNode {
     fn eval(&mut self, context: &mut NodeContext) {
         if self.out.is_none() {
             self.out = Some(context.atlas.base(&mut context.rng.generic));
+        }
+    }
+
+    fn state(&self) -> NodeState {
+        NodeState {
+            held: self.out.clone(),
+            ..NodeState::default()
         }
     }
 

@@ -3,8 +3,14 @@ name = "matlas"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = ["crates/matlas-wasm"]
+
 [dependencies]
 arrayvec = "0.7.8"
 serde = { version = "1.0.229", features = ["derive"] }
 rand = { version = "0.10.3", default-features = false, features = ["serde"] }
 blake3 = "1.8.7"
+
+[dev-dependencies]
+serde_json = "1.0.145"

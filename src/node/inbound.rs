@@ -1,4 +1,8 @@
-use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use crate::{
+    context::NodeContext,
+    item::Item,
+    node::{NodeBehavior, NodeState},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +28,13 @@ impl NodeBehavior for InBoundNode {
     fn eval(&mut self, context: &mut NodeContext) {
         while let Some(item) = self.ins.pop() {
             context.repo.inbound(item.id);
+        }
+    }
+
+    fn state(&self) -> NodeState {
+        NodeState {
+            queued: self.ins.len(),
+            ..NodeState::default()
         }
     }
 
