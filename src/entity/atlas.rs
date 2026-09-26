@@ -1,10 +1,11 @@
 use rand::{Rng, RngExt};
 use scc::HashMap;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicUsize;
 
-use crate::item::{Item, ItemId};
+use crate::item::{CapitalizedItem, Item, ItemId};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Atlas {
     names: HashMap<ItemId, String>,
     levels: HashMap<ItemId, usize>,
@@ -147,7 +148,7 @@ pub trait ItemExtAtlas {
     fn name_atlas(&self, atlas: &Atlas) -> String;
     fn value_atlas(&self, atlas: &Atlas) -> usize;
     fn level_atlas(&self, atlas: &Atlas) -> usize;
-    fn fname_atlas(&self, atlas: &Atlas) -> String;
+    fn capitalize_atlas(&self, atlas: &Atlas) -> CapitalizedItem;
 }
 
 impl ItemExtAtlas for Item {
@@ -163,13 +164,13 @@ impl ItemExtAtlas for Item {
         atlas.safe_level(self.id)
     }
 
-    fn fname_atlas(&self, atlas: &Atlas) -> String {
-        let name = self.name_atlas(atlas);
-        format!(
-            "{} Lv.{}",
-            name[0..1].to_uppercase() + &name[1..],
-            self.level_atlas(atlas)
-        )
+    fn capitalize_atlas(&self, atlas: &Atlas) -> CapitalizedItem {
+        CapitalizedItem {
+            name: self.name_atlas(atlas),
+            item: self.clone(),
+            value: self.value_atlas(atlas),
+            level: self.level_atlas(atlas),
+        }
     }
 }
 
@@ -188,11 +189,11 @@ impl Mix for (Item, Item) {
         let mixed_item = self.mix(rng, atlas);
         format!(
             "Recipe: {}({}) + {}({}) => {}({})",
-            self.0.fname_atlas(&atlas),
+            self.0.capitalize_atlas(&atlas),
             self.0.value_atlas(&atlas),
-            self.1.fname_atlas(&atlas),
+            self.1.capitalize_atlas(&atlas),
             self.1.value_atlas(&atlas),
-            mixed_item.1.fname_atlas(&atlas),
+            mixed_item.1.capitalize_atlas(&atlas),
             mixed_item.1.value_atlas(&atlas)
         )
     }

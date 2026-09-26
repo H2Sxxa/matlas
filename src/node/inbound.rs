@@ -1,11 +1,19 @@
-use crate::{context::NodeContext, item::Item, node::Node};
+use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use serde::{Deserialize, Serialize};
 
-pub struct InBoundNode;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InBoundNode {
+    ins: Vec<Item>,
+}
 
-impl Node<Item, ()> for InBoundNode {
+impl NodeBehavior for InBoundNode {
     const NAME: &'static str = "InBound";
 
-    fn eval(&mut self, context: &mut NodeContext, input: Item) -> () {
-        context.repo.inbound(input.id);
+    fn eval(&mut self, context: &mut NodeContext) {
+        while let Some(item) = self.ins.pop() {
+            context.repo.inbound(item.id);
+        }
     }
+
+    // Inbound has no output, so no push
 }

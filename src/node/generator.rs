@@ -1,11 +1,8 @@
-use crate::{context::NodeContext, item::Item, node::Node};
+// Generator will push Item / tick
+use crate::{context::NodeContext, item::Item, node::NodeBehavior};
+use serde::{Deserialize, Serialize};
 
-pub struct GeneratorNode;
-
-impl Node<(), Item> for GeneratorNode {
-    const NAME: &'static str = "Generator";
-
-    fn eval(&mut self, context: &mut NodeContext, _input: ()) -> Item {
-        context.atlas.base(&mut context.rng.discover)
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneratorNode {
+    out: Item,
 }

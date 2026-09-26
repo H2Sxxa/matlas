@@ -1,8 +1,10 @@
 use scc::HashMap;
+use serde::{Deserialize, Serialize};
 
 use crate::item::{Item, ItemId};
 pub type Count = usize;
-#[derive(Debug)]
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Repo {
     inner: HashMap<ItemId, Count>,
 }
