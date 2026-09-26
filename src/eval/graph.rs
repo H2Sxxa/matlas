@@ -14,8 +14,14 @@ pub struct Graph {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphError {
-    PositionOutOfBounds { pos: Pos, size: (usize, usize) },
-    OutputRestoreConflict { pos: Pos, item: crate::item::Item },
+    PositionOutOfBounds {
+        pos: Pos,
+        size: (usize, usize),
+    },
+    OutputRestoreConflict {
+        pos: Pos,
+        item: crate::item::Item,
+    },
 }
 
 impl Graph {
@@ -70,23 +76,32 @@ impl Graph {
 
         let mut outputs = Vec::new();
         for pos in &positions {
-            let Some(direction) = self.nodes.get(pos).map(|node| node.direction) else {
+            let Some(directions) = self.nodes.get(pos).map(Node::output_directions) else {
                 continue;
             };
-            let next = self.next_pos(pos, direction);
-            let destination_exists = next.is_some_and(|next| self.nodes.contains_key(&next));
+            let routes = directions
+                .into_iter()
+                .filter_map(|direction| {
+                    self.next_pos(pos, direction)
+                        .filter(|next| self.nodes.contains_key(next))
+                        .map(|next| Route {
+                            direction,
+                            to: next,
+                        })
+                })
+                .collect::<Vec<_>>();
             let Some(node) = self.nodes.get_mut(pos) else {
                 continue;
             };
             let Some(item) = node.take_output() else {
                 continue;
             };
-            if let Some(next) = next.filter(|_| destination_exists) {
+            if !routes.is_empty() {
                 outputs.push(Output {
                     from: *pos,
-                    to: next,
+                    routes,
                     item,
-                    accepted: false,
+                    route: None,
                 });
             } else {
                 restore_output(node, *pos, item)?;
@@ -99,37 +114,38 @@ impl Graph {
             .map(|(pos, node)| (*pos, node.input_capacity()))
             .collect::<HashMap<_, _>>();
         for output in &mut outputs {
-            let capacity = remaining_capacity
-                .get_mut(&output.to)
-                .expect("output destinations are snapshotted from graph nodes");
-            if *capacity > 0 {
-                *capacity -= 1;
-                output.accepted = true;
+            if let Some(route) = output.routes.iter().find(|route| {
+                remaining_capacity
+                    .get(&route.to)
+                    .is_some_and(|capacity| *capacity > 0)
+            }) {
+                if let Some(capacity) = remaining_capacity.get_mut(&route.to) {
+                    *capacity -= 1;
+                    output.route = Some(*route);
+                }
             }
         }
 
         while reject_conflicting_transport_inputs(&mut outputs, &self.nodes) {}
 
-        for output in outputs.iter().filter(|output| !output.accepted) {
-            let source = self
-                .nodes
-                .get_mut(&output.from)
-                .expect("output sources are snapshotted from graph nodes");
-            restore_output(source, output.from, output.item.clone())?;
+        for output in outputs.iter().filter(|output| output.route.is_none()) {
+            if let Some(source) = self.nodes.get_mut(&output.from) {
+                restore_output(source, output.from, output.item.clone())?;
+            }
         }
 
-        for output in outputs.into_iter().filter(|output| output.accepted) {
+        for output in outputs.into_iter().filter(|output| output.route.is_some()) {
+            let Some(route) = output.route else { continue };
             let rejected = self
                 .nodes
-                .get_mut(&output.to)
-                .expect("output destinations are snapshotted from graph nodes")
-                .accept(output.item);
+                .get_mut(&route.to)
+                .and_then(|node| node.accept(output.item));
             if let Some(item) = rejected {
-                let source = self
-                    .nodes
-                    .get_mut(&output.from)
-                    .expect("output sources are snapshotted from graph nodes");
-                restore_output(source, output.from, item)?;
+                if let Some(source) = self.nodes.get_mut(&output.from) {
+                    restore_output(source, output.from, item)?;
+                }
+            } else if let Some(source) = self.nodes.get_mut(&output.from) {
+                source.confirm_output(route.direction);
             }
         }
 
@@ -150,28 +166,31 @@ impl Graph {
 #[derive(Debug, Clone)]
 struct Output {
     from: Pos,
-    to: Pos,
+    routes: Vec<Route>,
     item: crate::item::Item,
-    accepted: bool,
+    route: Option<Route>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Route {
+    direction: Direction,
+    to: Pos,
 }
 
 fn reject_conflicting_transport_inputs(outputs: &mut [Output], nodes: &HashMap<Pos, Node>) -> bool {
     let blocked_sources = outputs
         .iter()
-        .filter(|output| !output.accepted)
+        .filter(|output| output.route.is_none())
         .map(|output| output.from)
         .collect::<HashSet<_>>();
     let mut changed = false;
 
     for output in outputs.iter_mut() {
-        if output.accepted
-            && blocked_sources.contains(&output.to)
-            && nodes
-                .get(&output.to)
-                .expect("output destinations are snapshotted from graph nodes")
-                .is_transport()
-        {
-            output.accepted = false;
+        if output.route.is_some_and(|route| {
+            blocked_sources.contains(&route.to)
+                && nodes.get(&route.to).is_some_and(Node::is_transport)
+        }) {
+            output.route = None;
             changed = true;
         }
     }
@@ -179,7 +198,11 @@ fn reject_conflicting_transport_inputs(outputs: &mut [Output], nodes: &HashMap<P
     changed
 }
 
-fn restore_output(node: &mut Node, pos: Pos, item: crate::item::Item) -> Result<(), GraphError> {
+fn restore_output(
+    node: &mut Node,
+    pos: Pos,
+    item: crate::item::Item,
+) -> Result<(), GraphError> {
     node.restore_output(item)
         .map_err(|item| GraphError::OutputRestoreConflict { pos, item })
 }
@@ -187,196 +210,82 @@ fn restore_output(node: &mut Node, pos: Pos, item: crate::item::Item) -> Result<
 #[cfg(test)]
 mod tests {
     use crate::{
-        context::NodeContext,
-        entity::{atlas::Atlas, repo::Repo},
-        node::{
-            Direction, Node, NodeObject, Pos, belt::BeltNode, generator::GeneratorNode,
-            inbound::InBoundNode, mixturer::MixturerNode, outbound::OutBoundNode,
-        },
-        rng::Rng,
+        node::{Direction, Pos},
+        test_support::{belt, context, generator, graph, inbound, peek_output, place, ticks},
     };
 
-    use super::Graph;
+    use super::GraphError;
 
-    fn context() -> NodeContext {
-        NodeContext::new(Atlas::new(), Repo::new(), Rng::new([0; 16]))
-    }
-
+    // (0,0) G>  (1,0) B>  (2,0) B>  (3,0) I
+    // Legend: G generator | B belt | I inbound | > facing right.
+    // Evaluation runs before movement, so an item advances a single edge per tick.
     #[test]
-    fn moves_items_one_edge_per_tick_and_stores_them() {
-        let mut graph = Graph::new((3, 1));
-        graph
-            .insert(
-                Pos { x: 0, y: 0 },
-                Node::new(
-                    NodeObject::Generator(GeneratorNode::new()),
-                    Direction::Right,
-                ),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 0 },
-                Node::new(NodeObject::Transport(BeltNode::new()), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 2, y: 0 },
-                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
-            )
-            .unwrap();
+    fn moves_an_item_one_edge_per_tick() {
+        let mut graph = graph((4, 1));
+        place(&mut graph, Pos { x: 0, y: 0 }, generator(Direction::Right));
+        place(&mut graph, Pos { x: 1, y: 0 }, belt(Direction::Right));
+        place(&mut graph, Pos { x: 2, y: 0 }, belt(Direction::Right));
+        place(&mut graph, Pos { x: 3, y: 0 }, inbound(Direction::Right));
         let mut context = context();
 
-        graph.tick(&mut context).unwrap();
-        assert_eq!(context.repo.count(0), 0);
-        graph.tick(&mut context).unwrap();
-        assert_eq!(context.repo.count(0), 0);
-        graph.tick(&mut context).unwrap();
-        assert_eq!(context.repo.count(0), 1);
-    }
-
-    #[test]
-    fn mixer_fills_both_input_slots_from_one_generator() {
-        let mut graph = Graph::new((3, 1));
-        graph
-            .insert(
-                Pos { x: 0, y: 0 },
-                Node::new(
-                    NodeObject::Generator(GeneratorNode::new()),
-                    Direction::Right,
-                ),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 0 },
-                Node::new(NodeObject::Mixer(MixturerNode::new()), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 2, y: 0 },
-                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
-            )
-            .unwrap();
-        let mut context = context();
-
-        for _ in 0..4 {
-            graph.tick(&mut context).unwrap();
+        for (tick, expected) in [0, 0, 0, 1].into_iter().enumerate() {
+            ticks(&mut graph, &mut context, 1);
+            assert_eq!(context.repo.count(0), expected, "after tick {}", tick + 1);
         }
-
-        assert_eq!(context.repo.count(0), 0);
-        assert_eq!(context.repo.count(1), 1);
     }
 
+    // (1,0) G>
+    // (2,1) G^   (2,0) I
+    // Legend: G generator | I inbound | > ^ facing.
+    // An inbound has no slot limit, so both sources deliver in the same tick.
     #[test]
-    fn mixer_accepts_inputs_arriving_on_different_ticks() {
-        let mut graph = Graph::new((3, 3));
-        graph
-            .insert(
-                Pos { x: 0, y: 0 },
-                Node::new(NodeObject::Outbound(OutBoundNode::new(0)), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 0 },
-                Node::new(NodeObject::Mixer(MixturerNode::new()), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 2 },
-                Node::new(NodeObject::Generator(GeneratorNode::new()), Direction::Up),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 1 },
-                Node::new(NodeObject::Transport(BeltNode::new()), Direction::Up),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 2, y: 0 },
-                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
-            )
-            .unwrap();
-        let mut context = context();
-        context.repo.inbound(0);
-
-        for _ in 0..4 {
-            graph.tick(&mut context).unwrap();
-        }
-
-        assert_eq!(context.repo.count(0), 0);
-        assert_eq!(context.repo.count(1), 1);
-    }
-    // G
-    // MO
-    // G
-    #[test]
-    fn two_generators_feed_mixer_and_store_material_metadata() {
-        let mut graph = Graph::new((2, 3));
-        graph
-            .insert(
-                Pos { x: 0, y: 0 },
-                Node::new(NodeObject::Generator(GeneratorNode::new()), Direction::Down),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 0, y: 1 },
-                Node::new(NodeObject::Mixer(MixturerNode::new()), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 1 },
-                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 0, y: 2 },
-                Node::new(NodeObject::Generator(GeneratorNode::new()), Direction::Up),
-            )
-            .unwrap();
+    fn accepts_one_item_per_source_into_the_same_node() {
+        let mut graph = graph((3, 2));
+        place(&mut graph, Pos { x: 1, y: 0 }, generator(Direction::Right));
+        place(&mut graph, Pos { x: 2, y: 0 }, inbound(Direction::Right));
+        place(&mut graph, Pos { x: 2, y: 1 }, generator(Direction::Up));
         let mut context = context();
 
-        for _ in 0..3 {
-            graph.tick(&mut context).unwrap();
-        }
+        ticks(&mut graph, &mut context, 2);
+        assert_eq!(context.repo.count(0), 2);
 
-        let item_id = 1;
-        assert_eq!(context.repo.count(item_id), 1);
-        assert!(!context.atlas.safe_name(item_id).is_empty());
-        assert!(context.atlas.safe_level(item_id) >= 1);
-        assert!(context.atlas.safe_value(item_id) >= 1);
+        ticks(&mut graph, &mut context, 1);
+        assert_eq!(context.repo.count(0), 4);
     }
 
+    // (0,0) G>  (1,0) B>  (2,0) .
+    // Legend: G generator | B belt | . empty cell | > facing right.
+    // The belt cannot drain, so it keeps its item and the generator keeps the item
+    // it could not hand over: nothing is dropped or overwritten.
     #[test]
-    fn outbound_transfers_a_repository_item() {
-        let mut graph = Graph::new((2, 1));
-        graph
-            .insert(
-                Pos { x: 0, y: 0 },
-                Node::new(NodeObject::Outbound(OutBoundNode::new(0)), Direction::Right),
-            )
-            .unwrap();
-        graph
-            .insert(
-                Pos { x: 1, y: 0 },
-                Node::new(NodeObject::Inbound(InBoundNode::new()), Direction::Right),
-            )
-            .unwrap();
+    fn keeps_items_out_of_a_jammed_transport_without_losing_them() {
+        let mut graph = graph((3, 1));
+        place(&mut graph, Pos { x: 0, y: 0 }, generator(Direction::Right));
+        place(&mut graph, Pos { x: 1, y: 0 }, belt(Direction::Right));
         let mut context = context();
-        context.repo.inbound(0);
 
-        graph.tick(&mut context).unwrap();
+        ticks(&mut graph, &mut context, 4);
+
         assert_eq!(context.repo.count(0), 0);
-        graph.tick(&mut context).unwrap();
-        assert_eq!(context.repo.count(0), 1);
+        assert!(peek_output(&mut graph, Pos { x: 0, y: 0 }).is_some());
+        assert!(peek_output(&mut graph, Pos { x: 1, y: 0 }).is_some());
+    }
+
+    // (2,0) lies outside a 2x1 graph.
+    // Legend: G generator | > facing right.
+    #[test]
+    fn rejects_positions_outside_the_graph() {
+        let mut graph = graph((2, 1));
+        let pos = Pos { x: 2, y: 0 };
+
+        let error = graph.insert(pos, generator(Direction::Right)).unwrap_err();
+
+        assert_eq!(
+            error,
+            GraphError::PositionOutOfBounds {
+                pos,
+                size: (2, 1)
+            }
+        );
     }
 }

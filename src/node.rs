@@ -3,11 +3,13 @@ use std::ops::Add;
 
 use crate::{context::NodeContext, item::Item};
 use serde::{Deserialize, Serialize};
+pub mod belt;
+pub mod distributor;
 pub mod generator;
 pub mod inbound;
 pub mod mixturer;
 pub mod outbound;
-pub mod belt;
+pub mod overflow;
 
 pub trait NodeBehavior {
     const NAME: &'static str;
@@ -24,6 +26,10 @@ pub trait NodeBehavior {
     fn input_capacity(&self) -> usize {
         0
     }
+    fn output_directions(&self, direction: Direction) -> Vec<Direction> {
+        vec![direction]
+    }
+    fn confirm_output(&mut self, _output_direction: Direction, _facing: Direction) {}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +40,8 @@ pub enum NodeObject {
     Outbound(outbound::OutBoundNode),
     Mixer(mixturer::MixturerNode),
     Transport(belt::BeltNode),
+    Distributor(distributor::DistributorNode),
+    Overflow(overflow::OverflowNode),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +62,8 @@ impl Node {
             NodeObject::Outbound(node) => node.eval(context),
             NodeObject::Mixer(node) => node.eval(context),
             NodeObject::Transport(node) => node.eval(context),
+            NodeObject::Distributor(node) => node.eval(context),
+            NodeObject::Overflow(node) => node.eval(context),
         }
     }
 
@@ -64,6 +74,8 @@ impl Node {
             NodeObject::Outbound(node) => node.take_output(),
             NodeObject::Mixer(node) => node.take_output(),
             NodeObject::Transport(node) => node.take_output(),
+            NodeObject::Distributor(node) => node.take_output(),
+            NodeObject::Overflow(node) => node.take_output(),
         }
     }
 
@@ -74,6 +86,8 @@ impl Node {
             NodeObject::Outbound(node) => node.restore_output(item),
             NodeObject::Mixer(node) => node.restore_output(item),
             NodeObject::Transport(node) => node.restore_output(item),
+            NodeObject::Distributor(node) => node.restore_output(item),
+            NodeObject::Overflow(node) => node.restore_output(item),
         }
     }
 
@@ -84,6 +98,8 @@ impl Node {
             NodeObject::Outbound(node) => node.accept(item),
             NodeObject::Mixer(node) => node.accept(item),
             NodeObject::Transport(node) => node.accept(item),
+            NodeObject::Distributor(node) => node.accept(item),
+            NodeObject::Overflow(node) => node.accept(item),
         }
     }
 
@@ -94,20 +110,62 @@ impl Node {
             NodeObject::Outbound(node) => node.input_capacity(),
             NodeObject::Mixer(node) => node.input_capacity(),
             NodeObject::Transport(node) => node.input_capacity(),
+            NodeObject::Distributor(node) => node.input_capacity(),
+            NodeObject::Overflow(node) => node.input_capacity(),
         }
     }
 
     pub fn is_transport(&self) -> bool {
         matches!(self.object, NodeObject::Transport(_))
     }
+
+    pub fn output_directions(&self) -> Vec<Direction> {
+        match &self.object {
+            NodeObject::Generator(node) => node.output_directions(self.direction),
+            NodeObject::Inbound(node) => node.output_directions(self.direction),
+            NodeObject::Outbound(node) => node.output_directions(self.direction),
+            NodeObject::Mixer(node) => node.output_directions(self.direction),
+            NodeObject::Transport(node) => node.output_directions(self.direction),
+            NodeObject::Distributor(node) => node.output_directions(self.direction),
+            NodeObject::Overflow(node) => node.output_directions(self.direction),
+        }
+    }
+
+    pub fn confirm_output(&mut self, output_direction: Direction) {
+        let facing = self.direction;
+        match &mut self.object {
+            NodeObject::Generator(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Inbound(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Outbound(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Mixer(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Transport(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Distributor(node) => node.confirm_output(output_direction, facing),
+            NodeObject::Overflow(node) => node.confirm_output(output_direction, facing),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Direction {
     Right,
     Down,
     Up,
     Left,
+}
+
+impl Direction {
+    pub fn left(self) -> Self {
+        match self {
+            Self::Right => Self::Up,
+            Self::Down => Self::Right,
+            Self::Up => Self::Left,
+            Self::Left => Self::Down,
+        }
+    }
+
+    pub fn right(self) -> Self {
+        self.left().left().left()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone, Copy)]

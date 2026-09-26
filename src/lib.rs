@@ -5,3 +5,6 @@ pub mod loot;
 pub mod node;
 pub mod rng;
 pub mod eval;
+
+#[cfg(test)]
+mod test_support;
