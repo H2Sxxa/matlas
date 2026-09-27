@@ -34,6 +34,10 @@ cd web && pnpm typecheck
 cd web && pnpm smoke   # plays a short run through the wasm boundary in Node
 ```
 
+## Design
+
+Blog: https://h2sxxa.github.io/blog/about_factory_game_design/
+
 ## Deploying
 
 Pushing to `main` builds the wasm package and the site, then publishes `web/dist`
